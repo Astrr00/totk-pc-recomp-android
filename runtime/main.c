@@ -22,6 +22,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__aarch64__)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#endif
 
 #include "cfg.h"
 #include "host.h"
@@ -260,10 +264,18 @@ static volatile int host_probe_hits;
 static void host_probe(Cpu *c) { host_probe_hits++; c->x[0] = 42; }
 
 static void check_cpu(void) {
+#if defined(__x86_64__)
     __builtin_cpu_init();
     int ok = __builtin_cpu_supports("avx2") && __builtin_cpu_supports("fma") && __builtin_cpu_supports("bmi2");
     printf("cpu: x86-64-v3 (AVX2, FMA, BMI2) %s\n", ok ? "present" : "MISSING");
     CHECK(ok, "the lifted code is built for x86-64-v3");
+#elif defined(__aarch64__)
+    // build_game.py --target aarch64 compiles for armv8.2-a+crc: ASIMD, CRC32 and the LSE atomics (HWCAP_ATOMICS).
+    unsigned long hw = getauxval(AT_HWCAP);
+    int ok = (hw & HWCAP_ASIMD) && (hw & HWCAP_CRC32) && (hw & HWCAP_ATOMICS);
+    printf("cpu: armv8.2-a (ASIMD, CRC32, LSE) %s\n", ok ? "present" : "MISSING");
+    CHECK(ok, "the lifted code is built for armv8.2-a+crc");
+#endif
 }
 
 // Layout: ascending, no overlap, below 2^39, and inside the window mem_init reserved.
